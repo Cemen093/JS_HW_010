@@ -6,8 +6,6 @@ var game = {
     platform: undefined,
     ball: undefined,
     mouse: undefined,
-    rows: 3,
-    cols: 4,
     isRunning: true,
     isBallReleased: false,
     result: undefined,
@@ -39,17 +37,30 @@ var game = {
     },
     create: function () {
         this.platform = create_platform(game);
+        console.log("platform created");
         this.ball = create_ball(game);
+        console.log("ball created");
         this.blocks = create_block(game);
+        console.log("blocks created");
         this.mouse = create_mouse(game);
+        console.log("mouse created");
     },
     start: function () {
+        console.log("**start**")
+        console.log("--init--");
         this.init();
+        console.log("--load--")
         this.load();
+        console.log("--create--");
         this.create();
+        console.log("--run--");
         this.run();
     },
     update: function () {
+        if (this.blocks.isNewLineCanBeCreated()){
+            this.blocks.createNewLine();
+        }
+
         if (this.mouse.onThePlatform()){
             this.platform.stop()
         } else {
@@ -68,20 +79,15 @@ var game = {
             this.platform.move();
         }
 
+        if (this.ball.dx || this.ball.dy){
+            this.ball.move();
+        }
+
         if (this.ball.collide(this.platform)){
             this.ball.bumpPlatform(this.platform);
         }
 
-        if (this.ball.dx || this.ball.dy){
-            this.ball.move();
-        }
-        for (let block of this.blocks.getBlocks()){
-            if (block.isAlive){
-                if (this.ball.collide(block)){
-                    this.ball.bumpBlock(block);
-                }
-            }
-        }
+        this.ball.bumpBlocksIfCollide();
 
         if (this.score >= this.blocks.getCount()) {
             this.isRunning = false;
@@ -160,7 +166,6 @@ var game = {
 
         let message = "Top Five";
         for (let i = 1; i <= topLength; i++) {
-            console.log(topFive[i]);
             message += "\n" + topFive[i].name + " = " + topFive[i].score
         }
         alert(message);
@@ -170,19 +175,22 @@ var game = {
 
 let create_block = function (game) {
     let blocks = [];
+    let rows = 3;
+    let cols = 4;
 
     let widthBlock = game.width / 6;
     let heightBlock = game.height / 10;
     let indent_width_one = game.width / 20;
-    let indent_width_two = (game.width-indent_width_one * 2 -widthBlock * game.cols) / (game.cols - 1);
+    let indent_width_two = (game.width-indent_width_one * 2 -widthBlock * cols) / (cols - 1);
     let indent_height_one = heightBlock / 2;
     let indent_height_two = game.height / 2;
-    let indent_height_three = (game.height - indent_height_one - indent_height_two - heightBlock * game.rows) / (game.rows - 1);
-    for (let row = 0; row < game.rows; row++) {
-        for (let col = 0; col < game.cols; col++){
+    let indent_height_three = (game.height - indent_height_one - indent_height_two - heightBlock * rows) / (rows - 1);
+
+    let addNewRow = function (row, randomSprite=false) {
+        for (let col = 0; col < cols; col++){
 
             let sprite = new Image();
-            sprite.src = "img/tile/block_" + (row * game.rows + col + 1) + ".png";
+            sprite.src = "img/tile/block_" + (randomSprite ? Math.floor(Math.random() * 12 + 1) : (row * rows + col + 1)) + ".png";
             blocks.push({
                 x: indent_width_one + widthBlock*col + indent_width_two*col,
                 y: indent_height_one + heightBlock*row + indent_height_three*row,
@@ -205,36 +213,50 @@ let create_block = function (game) {
                     let x = this.x + this.dx;
                     let y = this.y + this.dy;
 
-                    if (y + this.height > game.height) {
+                    if (this.isAlive && y + this.height > game.height) {
                         game.isRunning = false;
                         game.result = "You Lose";
                     }
-                }
+                },
             })
         }
     }
+
+    for (let row = rows - 1; row > -1; row--) {
+        addNewRow(row);
+    }
     return {
         blocks: blocks,
+        getBlocks: function () {
+            return this.blocks;
+        },
+        getCount: function () {
+            return this.blocks.length;
+        },
         move: function () {
             for (let block of this.blocks){
                 block.move();
             }
-        },
-        getCount: function () {
-            return this.blocks.length;
         },
         checkBounds: function () {
             for (let block of this.blocks){
                 block.checkBounds();
             }
         },
-        getBlocks: function () {
-            return this.blocks;
-        },
         setAcceleration: function () {
             for (let block of this.blocks){
                 block.setAcceleration();
             }
+        },
+        isNewLineCanBeCreated: function () {
+/*            console.log(this.blocks[rows*cols-1]);
+            console.log(this.blocks[rows*cols-1].y);*/
+            return this.blocks[rows*cols-1].y > indent_height_one + heightBlock + indent_height_three;
+        },
+        createNewLine: function () {
+            addNewRow(0, true);
+            this.setAcceleration();
+            rows++;
         }
     };
 }
@@ -271,7 +293,7 @@ let create_ball = function (game) {
             }
             return false;
         },
-        isSideCollision: function (element) {
+        isSideCollide: function (element) {
             let x = this.x + this.dx;
             let y = this.y;
 
@@ -284,7 +306,7 @@ let create_ball = function (game) {
             return false;
         },
         bumpBlock: function (block) {
-            if (this.isSideCollision(block)){
+            if (this.isSideCollide(block)){
                 this.dx *= -1;
             } else {
                 this.dy *= -1;
@@ -292,6 +314,15 @@ let create_ball = function (game) {
 
             block.isAlive = false;
             ++game.score;
+        },
+        bumpBlocksIfCollide: function () {
+            for (let block of game.blocks.getBlocks()){
+                if (block.isAlive){
+                    if (game.ball.collide(block)){
+                        game.ball.bumpBlock(block);
+                    }
+                }
+            }
         },
         onTheRightSide: function (platform) {
             return this.x + this.width / 2 > platform.x + (platform.width * 0.7);
